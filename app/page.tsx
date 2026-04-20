@@ -84,7 +84,7 @@ export default function LandingPage() {
         <h2 className="text-xl font-semibold text-neutral-ink">
           O que você verá nos próximos 10 minutos
         </h2>
-        <ol className="mt-4 grid gap-4 text-sm text-neutral-ink md:grid-cols-3">
+        <ol className="mt-4 grid gap-4 text-sm text-neutral-ink md:grid-cols-2 xl:grid-cols-4">
           <li className="rounded-lg border border-black/5 bg-neutral-bg p-4">
             <div className="font-semibold text-brand-purple">
               1 · 100% Compliance
@@ -99,7 +99,7 @@ export default function LandingPage() {
               2 · Exceção fiscal
             </div>
             <p className="mt-1 text-neutral-muted">
-              CTe com ISS calculado em alíquota incorreta — encaminhado para
+              CTe com ICMS destacado em alíquota incorreta — encaminhado para
               revisão.
             </p>
           </li>
@@ -110,6 +110,15 @@ export default function LandingPage() {
             <p className="mt-1 text-neutral-muted">
               NFe MRO com valor acima da tolerância do pedido — bloqueio com
               justificativa.
+            </p>
+          </li>
+          <li className="rounded-lg border border-brand-teal/20 bg-brand-teal-light/40 p-4">
+            <div className="font-semibold text-brand-teal">
+              4 · REPORTO
+            </div>
+            <p className="mt-1 text-neutral-muted">
+              Aquisição de guindaste portuário com PIS/COFINS/IPI suspensos —
+              agente confirma enquadramento no regime especial.
             </p>
           </li>
         </ol>

@@ -30,7 +30,7 @@ export const AGENT_STEP_TITLES: Record<AgentStepKey, string> = {
   intake: "Intake & Classificação",
   extraction: "Extração Fiscal",
   three_way_match: "3-Way Match",
-  retentions: "Validação de Retenções",
+  retentions: "Validação Tributária",
   decision: "Decisão Final",
 };
 

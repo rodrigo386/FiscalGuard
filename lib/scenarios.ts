@@ -49,12 +49,14 @@ export const SCENARIOS: Record<
   happy: buildHappyScenario(),
   tax_exception: buildTaxExceptionScenario(),
   match_divergence: buildMatchDivergenceScenario(),
+  reporto: buildReportoScenario(),
 };
 
 export const SCENARIO_ORDER: Array<Exclude<ScenarioKey, "custom">> = [
   "happy",
   "tax_exception",
   "match_divergence",
+  "reporto",
 ];
 
 /* ------------------------------- helpers -------------------------------- */
@@ -127,15 +129,8 @@ function buildHappyScenario(): ScenarioBundle {
       calculated: 2375,
       declared: 2375,
       status: "ok",
-      note: "Código 20.01 · Santos/SP",
-    },
-    {
-      kind: "INSS",
-      rate: 0,
-      calculated: 0,
-      declared: 0,
-      status: "not_applicable",
-      note: "Serviço não se enquadra como cessão de mão de obra",
+      scope: "retained",
+      note: "Código 20.01 · Santos/SP · ISS retido pelo tomador",
     },
     {
       kind: "IRRF",
@@ -143,10 +138,43 @@ function buildHappyScenario(): ScenarioBundle {
       calculated: 712.5,
       declared: 712.5,
       status: "ok",
+      scope: "retained",
+      note: "IN RFB 1.234/2012 · serviços profissionais",
     },
-    { kind: "PIS", rate: 0.65, calculated: 308.75, declared: 308.75, status: "ok" },
-    { kind: "COFINS", rate: 3, calculated: 1425, declared: 1425, status: "ok" },
-    { kind: "CSLL", rate: 1, calculated: 475, declared: 475, status: "ok" },
+    {
+      kind: "INSS",
+      rate: 0,
+      calculated: 0,
+      declared: 0,
+      status: "not_applicable",
+      scope: "retained",
+      note: "Serviço não se enquadra como cessão de mão de obra",
+    },
+    {
+      kind: "PIS",
+      rate: 0,
+      calculated: 0,
+      declared: 0,
+      status: "not_applicable",
+      scope: "retained",
+      note: "Serviços portuários não estão na lista da Lei 10.833/03 art. 30 (CSRF)",
+    },
+    {
+      kind: "COFINS",
+      rate: 0,
+      calculated: 0,
+      declared: 0,
+      status: "not_applicable",
+      scope: "retained",
+    },
+    {
+      kind: "CSLL",
+      rate: 0,
+      calculated: 0,
+      declared: 0,
+      status: "not_applicable",
+      scope: "retained",
+    },
   ];
 
   const decision: FinalDecision = {
@@ -154,7 +182,7 @@ function buildHappyScenario(): ScenarioBundle {
     confidence: 97,
     summary: "Aprovação automática",
     justification:
-      "Nota aderente ao PO, evidência de serviço (SES) atestada e todas as retenções conferem com o cálculo do agente.",
+      "Nota aderente ao PO, evidência de serviço (SES) atestada, ISS de 5% (Santos) e IRRF de 1,5% conferem com o cálculo do agente. Obrigações acessórias pendentes: evento R-4010 EFD-Reinf até 15/05/2026.",
     flags: [],
   };
 
@@ -188,9 +216,9 @@ function buildHappyScenario(): ScenarioBundle {
     },
     {
       step: "retentions",
-      title: "Validação de Retenções",
+      title: "Validação Tributária",
       status: "success",
-      summary: "ISS, IRRF, PIS/COFINS/CSLL conferem com cálculo do agente",
+      summary: "ISS 5% retido (Santos) e IRRF 1,5% conferem · CSRF Lei 10.833 não aplicável a serviço portuário",
     },
     {
       step: "decision",
@@ -283,39 +311,66 @@ function buildTaxExceptionScenario(): ScenarioBundle {
 
   const retentions: Retention[] = [
     {
-      kind: "ISS",
-      rate: 5,
-      calculated: 4115,
-      declared: 1646,
+      kind: "ICMS",
+      rate: 12,
+      calculated: 9876,
+      declared: 5761,
       status: "mismatch",
-      note: "Santos/SP aplica 5% para transporte. Fornecedor declarou 2%.",
+      scope: "highlighted",
+      note: "Transporte intraestadual SP→SP: alíquota 12%. Fornecedor destacou 7% (alíquota interestadual). CFOP correto: 5.352.",
     },
     {
-      kind: "INSS",
+      kind: "IPI",
       rate: 0,
       calculated: 0,
       declared: 0,
       status: "not_applicable",
+      scope: "highlighted",
+      note: "Serviço de transporte — fora do campo de incidência do IPI",
     },
     {
-      kind: "IRRF",
-      rate: 1.5,
-      calculated: 1234.5,
-      declared: 1234.5,
-      status: "ok",
+      kind: "PIS",
+      rate: 0,
+      calculated: 0,
+      declared: 0,
+      status: "not_applicable",
+      scope: "retained",
+      note: "Transporte de cargas não está na lista da Lei 10.833/03 (art. 30)",
     },
-    { kind: "PIS", rate: 0.65, calculated: 535.0, declared: 535.0, status: "ok" },
-    { kind: "COFINS", rate: 3, calculated: 2469, declared: 2469, status: "ok" },
-    { kind: "CSLL", rate: 1, calculated: 823, declared: 823, status: "ok" },
+    {
+      kind: "COFINS",
+      rate: 0,
+      calculated: 0,
+      declared: 0,
+      status: "not_applicable",
+      scope: "retained",
+    },
+    {
+      kind: "CSLL",
+      rate: 0,
+      calculated: 0,
+      declared: 0,
+      status: "not_applicable",
+      scope: "retained",
+    },
+    {
+      kind: "ISS",
+      rate: 0,
+      calculated: 0,
+      declared: 0,
+      status: "not_applicable",
+      scope: "retained",
+      note: "Transporte intermunicipal/interestadual é tributado por ICMS, não ISS",
+    },
   ];
 
   const decision: FinalDecision = {
     action: "HUMAN_REVIEW",
     confidence: 88,
-    summary: "Revisão humana — divergência fiscal ISS",
+    summary: "Revisão humana — ICMS destacado a 7% em operação intraestadual SP (correto: 12%)",
     justification:
-      "ISS declarado a 2% enquanto o município prestador (Santos/SP) aplica 5% para serviços de transporte. Recomendação: devolver ao fornecedor ou aceitar com retenção corrigida de R$ 4.115,00.",
-    flags: ["retencao.iss.diff"],
+      "ICMS destacado pelo fornecedor a 7% (alíquota interestadual). A operação Santos→Campinas é intraestadual SP, alíquota correta 12% = R$ 9.876,00. Diferença a maior de R$ 4.115,00 no imposto devido. Recomendação: solicitar CT-e de substituição ou aceitar com provisão para complemento de ICMS via GIA/SPED Fiscal.",
+    flags: ["tributo.icms.aliquota", "cfop.verificar"],
   };
 
   const steps: AgentStepResult[] = [
@@ -348,11 +403,11 @@ function buildTaxExceptionScenario(): ScenarioBundle {
     },
     {
       step: "retentions",
-      title: "Validação de Retenções",
+      title: "Validação Tributária",
       status: "warning",
       summary:
-        "ISS: agente calculou R$ 4.115,00 (5%) · fornecedor declarou R$ 1.646,00 (2%) — diferença R$ 2.469,00",
-      warning: "Alíquota ISS inconsistente com município prestador",
+        "ICMS: agente calculou R$ 9.876,00 (12% intraestadual SP) · fornecedor destacou R$ 5.761,00 (7%) — diferença R$ 4.115,00",
+      warning: "Alíquota de ICMS inconsistente com operação intraestadual",
     },
     {
       step: "decision",
@@ -367,7 +422,7 @@ function buildTaxExceptionScenario(): ScenarioBundle {
     title: "Exceção fiscal — CTe Transporte",
     shortLabel: "Exceção fiscal",
     description:
-      "Transporte rodoviário R$ 82.300 com ISS em alíquota incorreta (2% vs 5%). Encaminhado para revisão.",
+      "Transporte rodoviário R$ 82.300 com ICMS destacado a 7% quando a operação intraestadual SP exige 12%. Encaminhado para revisão.",
     expectedStatus: "HUMAN_REVIEW",
     expectedScore: 88,
     invoice,
@@ -392,7 +447,7 @@ function buildMatchDivergenceScenario(): ScenarioBundle {
       name: "Equipamentos Industriais Brasil Ltda",
       cnpj: "55.444.333/0001-22",
     },
-    description: "12 un. Válvula industrial X-450",
+    description: "12 un. Válvula industrial X-450 · NCM 8481.80.39 · CFOP 5.101",
     grossAmount: 15800,
     quantity: 12,
     unitPrice: 1316.67,
@@ -455,19 +510,56 @@ function buildMatchDivergenceScenario(): ScenarioBundle {
 
   const retentions: Retention[] = [
     {
-      kind: "ISS",
-      rate: 0,
-      calculated: 0,
-      declared: 0,
-      status: "not_applicable",
-      note: "Mercadoria não sujeita a ISS",
+      kind: "ICMS",
+      rate: 18,
+      calculated: 2844,
+      declared: 2844,
+      status: "ok",
+      scope: "highlighted",
+      note: "SP→SP intraestadual · alíquota 18% · CST 00",
     },
     {
-      kind: "INSS",
+      kind: "IPI",
+      rate: 5,
+      calculated: 790,
+      declared: 790,
+      status: "ok",
+      scope: "highlighted",
+      note: "NCM 8481.80.39 · TIPI 5%",
+    },
+    {
+      kind: "ICMS-ST",
       rate: 0,
       calculated: 0,
       declared: 0,
       status: "not_applicable",
+      scope: "highlighted",
+      note: "NCM 8481 não consta do Protocolo ICMS-ST SP",
+    },
+    {
+      kind: "PIS",
+      rate: 0,
+      calculated: 0,
+      declared: 0,
+      status: "not_applicable",
+      scope: "retained",
+      note: "Retenção PIS/COFINS/CSLL (Lei 10.833) aplica-se a serviços, não a compra de mercadoria",
+    },
+    {
+      kind: "COFINS",
+      rate: 0,
+      calculated: 0,
+      declared: 0,
+      status: "not_applicable",
+      scope: "retained",
+    },
+    {
+      kind: "CSLL",
+      rate: 0,
+      calculated: 0,
+      declared: 0,
+      status: "not_applicable",
+      scope: "retained",
     },
     {
       kind: "IRRF",
@@ -475,18 +567,17 @@ function buildMatchDivergenceScenario(): ScenarioBundle {
       calculated: 0,
       declared: 0,
       status: "not_applicable",
+      scope: "retained",
+      note: "Venda de mercadoria não é hipótese de IRRF na fonte",
     },
-    { kind: "PIS", rate: 0.65, calculated: 102.7, declared: 102.7, status: "ok" },
-    { kind: "COFINS", rate: 3, calculated: 474, declared: 474, status: "ok" },
-    { kind: "CSLL", rate: 1, calculated: 158, declared: 158, status: "ok" },
   ];
 
   const decision: FinalDecision = {
     action: "HUMAN_REVIEW",
     confidence: 74,
-    summary: "Revisão humana — divergência 3-way match",
+    summary: "Revisão humana — divergência 3-way match de preço",
     justification:
-      "Valor da nota 8% acima do PO, fora da tolerância de 2%. Possível reajuste não formalizado ou erro de faturamento. Encaminhar ao comprador para validação.",
+      "Preço unitário da nota 8% acima do pedido (R$ 1.316,67 vs R$ 1.219,17), fora da tolerância de 2%. Tributação destacada (ICMS 18%, IPI 5%) está correta para NCM 8481.80.39 em operação intraestadual SP. Encaminhar ao comprador para validação do reajuste.",
     flags: ["match.amount.diff"],
   };
 
@@ -521,9 +612,9 @@ function buildMatchDivergenceScenario(): ScenarioBundle {
     },
     {
       step: "retentions",
-      title: "Validação de Retenções",
+      title: "Validação Tributária",
       status: "success",
-      summary: "PIS/COFINS/CSLL conferem com cálculo do agente",
+      summary: "ICMS 18% e IPI 5% destacados conferem · sem hipótese de ICMS-ST ou retenção federal nesta operação",
     },
     {
       step: "decision",
@@ -549,6 +640,208 @@ function buildMatchDivergenceScenario(): ScenarioBundle {
     decision,
     steps,
     audit: defaultAudit("match_divergence", goodsReceipt.kind),
+  };
+}
+
+function buildReportoScenario(): ScenarioBundle {
+  const invoice: Invoice = {
+    id: "inv-reporto",
+    type: "NFe",
+    number: "NFe 2026/0025701",
+    accessKey: "3526041122233300000140550010000257010000000240",
+    issueDate: isoToday(21),
+    supplier: {
+      name: "Indústria Portuária Nacional S.A.",
+      cnpj: "11.222.333/0001-44",
+    },
+    description:
+      "1 un. Guindaste móvel portuário RTG-P450 · NCM 8426.41.00 · CFOP 5.101 · REPORTO",
+    grossAmount: 2_400_000,
+    quantity: 1,
+    unitPrice: 2_400_000,
+    city: "Santos",
+    stateCode: "SP",
+  };
+
+  const purchaseOrder: PurchaseOrder = {
+    id: "po-reporto",
+    number: "PO-2026-005001",
+    supplierCnpj: "11.222.333/0001-44",
+    totalAmount: 2_400_000,
+    unitPrice: 2_400_000,
+    quantity: 1,
+    toleranceBps: 100,
+  };
+
+  const goodsReceipt: GoodsReceipt = {
+    id: "gr-reporto",
+    number: "GR-2026-011223",
+    confirmedAt: isoToday(21),
+    quantity: 1,
+    status: "confirmed",
+    kind: "goods_receipt",
+  };
+
+  const match: ThreeWayMatchResult = {
+    overall: "pass",
+    amountDiffPct: 0,
+    fields: [
+      {
+        label: "CNPJ fornecedor",
+        invoice: invoice.supplier.cnpj,
+        po: purchaseOrder.supplierCnpj,
+        status: "match",
+      },
+      {
+        label: "Quantidade",
+        invoice: String(invoice.quantity),
+        po: String(purchaseOrder.quantity),
+        gr: String(goodsReceipt.quantity),
+        status: "match",
+      },
+      {
+        label: "Valor bruto",
+        invoice: formatBRL(invoice.grossAmount),
+        po: formatBRL(purchaseOrder.totalAmount),
+        status: "match",
+      },
+      {
+        label: "Destinação",
+        invoice: "Ativo imobilizado portuário",
+        po: "Ativo imobilizado portuário",
+        status: "match",
+        note: "Enquadrado em REPORTO (Lei 11.033/2004) · ADE Receita Federal 217/2023",
+      },
+    ],
+  };
+
+  const retentions: Retention[] = [
+    {
+      kind: "ICMS",
+      rate: 18,
+      calculated: 432_000,
+      declared: 432_000,
+      status: "ok",
+      scope: "highlighted",
+      note: "SP→SP intraestadual · alíquota 18% · CST 00 (REPORTO não desonera ICMS)",
+    },
+    {
+      kind: "IPI",
+      rate: 0,
+      calculated: 0,
+      declared: 0,
+      status: "ok",
+      scope: "suspended",
+      note: "Suspenso por REPORTO · CST IPI 55 · bem para ativo imobilizado portuário",
+    },
+    {
+      kind: "PIS",
+      rate: 0,
+      calculated: 0,
+      declared: 0,
+      status: "ok",
+      scope: "suspended",
+      note: "Alíquota zero · REPORTO art. 14 da Lei 11.033/04",
+    },
+    {
+      kind: "COFINS",
+      rate: 0,
+      calculated: 0,
+      declared: 0,
+      status: "ok",
+      scope: "suspended",
+      note: "Alíquota zero · REPORTO art. 14 da Lei 11.033/04",
+    },
+    {
+      kind: "ICMS-ST",
+      rate: 0,
+      calculated: 0,
+      declared: 0,
+      status: "not_applicable",
+      scope: "highlighted",
+      note: "NCM 8426 não consta do Protocolo ICMS-ST",
+    },
+    {
+      kind: "IRRF",
+      rate: 0,
+      calculated: 0,
+      declared: 0,
+      status: "not_applicable",
+      scope: "retained",
+      note: "Venda de mercadoria não é hipótese de IRRF",
+    },
+  ];
+
+  const decision: FinalDecision = {
+    action: "POSTED",
+    confidence: 96,
+    summary: "Aprovação automática · REPORTO confirmado",
+    justification:
+      "Guindaste RTG-P450 destinado ao ativo imobilizado portuário — enquadramento REPORTO (Lei 11.033/2004) validado. PIS/COFINS/IPI suspensos corretamente aplicados pelo fornecedor. ICMS destacado a 18% (REPORTO não desonera ICMS estadual). PO, GR e valores conferem. Registro do benefício será enviado ao SPED Contribuições bloco M210/M610 com CST 49.",
+    flags: [],
+  };
+
+  const steps: AgentStepResult[] = [
+    {
+      step: "intake",
+      title: "Intake & Classificação",
+      status: "success",
+      summary: "Documento classificado como NFe · CFOP 5.101 · confiança 99%",
+      payload: { detectedType: "NFe", confidence: 0.99, cfop: "5.101" },
+    },
+    {
+      step: "extraction",
+      title: "Extração Fiscal",
+      status: "success",
+      summary:
+        "NCM 8426.41.00 extraída · CST IPI 55 (suspenso) · CST PIS/COFINS 49 (alíquota zero)",
+      payload: {
+        cnpj: invoice.supplier.cnpj,
+        numero: invoice.number,
+        valor: invoice.grossAmount,
+        data: invoice.issueDate,
+        chave: invoice.accessKey,
+        ncm: "8426.41.00",
+        cfop: "5.101",
+      },
+    },
+    {
+      step: "three_way_match",
+      title: "3-Way Match",
+      status: "success",
+      summary: "NF × PO × GR — match · destinação como ativo imobilizado confirmada",
+    },
+    {
+      step: "retentions",
+      title: "Validação Tributária",
+      status: "success",
+      summary:
+        "REPORTO: PIS/COFINS/IPI suspensos · ICMS 18% destacado corretamente (REPORTO não abrange ICMS)",
+    },
+    {
+      step: "decision",
+      title: "Decisão Final",
+      status: "success",
+      summary: "POSTED · 96% · benefício REPORTO confirmado",
+    },
+  ];
+
+  return {
+    key: "reporto",
+    title: "Regime REPORTO — Aquisição de Bem Portuário",
+    shortLabel: "REPORTO",
+    description:
+      "Guindaste portuário RTG R$ 2.400.000. Agente confirma enquadramento no REPORTO (Lei 11.033/2004) e valida suspensão de PIS/COFINS/IPI. ICMS mantido.",
+    expectedStatus: "POSTED",
+    expectedScore: 96,
+    invoice,
+    purchaseOrder,
+    goodsReceipt,
+    match,
+    retentions,
+    decision,
+    steps,
+    audit: defaultAudit("reporto", goodsReceipt.kind),
   };
 }
 

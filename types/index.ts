@@ -4,6 +4,7 @@ export type ScenarioKey =
   | "happy"
   | "tax_exception"
   | "match_divergence"
+  | "reporto"
   | "custom";
 
 export type AutonomyMode = "hitl_strong" | "score_based" | "full_autonomous";
@@ -85,9 +86,20 @@ export type RetentionKind =
   | "IRRF"
   | "PIS"
   | "COFINS"
-  | "CSLL";
+  | "CSLL"
+  | "ICMS"
+  | "ICMS-ST"
+  | "IPI";
 
 export type RetentionStatus = "ok" | "mismatch" | "not_applicable";
+
+/**
+ * Escopo tributário de cada linha:
+ * - retained:    tributo retido pelo tomador no pagamento (IRRF, INSS, CSRF, ISS retido)
+ * - highlighted: tributo destacado pelo fornecedor na nota (ICMS, IPI, ICMS-ST, PIS/COFINS não-cumulativo)
+ * - suspended:   tributo suspenso por regime especial (REPORTO, drawback etc.)
+ */
+export type TaxScope = "retained" | "highlighted" | "suspended";
 
 export interface Retention {
   kind: RetentionKind;
@@ -95,6 +107,7 @@ export interface Retention {
   declared: number;
   rate: number; // percentage
   status: RetentionStatus;
+  scope?: TaxScope;
   note?: string;
 }
 

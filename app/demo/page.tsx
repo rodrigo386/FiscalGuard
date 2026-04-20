@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
-import { Anchor, AlertTriangle, Scale } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Anchor, AlertTriangle, BadgeCheck, Scale } from "lucide-react";
 import { ScenarioCard } from "@/components/demo/ScenarioCard";
 import { UploadZone } from "@/components/demo/UploadZone";
 import { AutonomyModeSelector } from "@/components/demo/AutonomyModeSelector";
 import { AgentTimeline } from "@/components/demo/AgentTimeline";
+import { Button } from "@/components/ui/button";
+import { Play } from "lucide-react";
 import { SCENARIOS } from "@/lib/scenarios";
 import { useDemoStore } from "@/lib/store";
 import { useSSEProcessing } from "@/lib/use-sse-processing";
@@ -15,6 +17,8 @@ export default function DemoPage() {
   const { selectedScenario, autonomyMode, isProcessing, setAutonomyMode } =
     useDemoStore();
   const { runScenario } = useSSEProcessing();
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
+  const [poFile, setPoFile] = useState<File | null>(null);
 
   const cards = useMemo(
     () => [
@@ -39,12 +43,20 @@ export default function DemoPage() {
         tone: "warning" as const,
         expected: "HUMAN_REVIEW · 74%",
       },
+      {
+        key: "reporto" as ScenarioKey,
+        icon: BadgeCheck,
+        scenario: SCENARIOS.reporto,
+        tone: "success" as const,
+        expected: "POSTED · 96% · REPORTO",
+      },
     ],
     []
   );
 
-  const handleFile = (file: File) => {
-    runScenario("custom", autonomyMode, file);
+  const handleProcess = () => {
+    if (!invoiceFile) return;
+    runScenario("custom", autonomyMode, invoiceFile, poFile ?? undefined);
   };
 
   return (
@@ -58,8 +70,8 @@ export default function DemoPage() {
             Escolha um cenário
           </h1>
           <p className="mt-1 text-sm text-neutral-muted">
-            Três casos canônicos que cobrem caminho feliz, exceção fiscal e
-            divergência de 3-way match.
+            Quatro cenários canônicos: compliance pleno, exceção fiscal,
+            divergência de 3-way match e regime especial REPORTO.
           </p>
         </header>
 
@@ -79,11 +91,46 @@ export default function DemoPage() {
           ))}
         </div>
 
-        <UploadZone
-          disabled={isProcessing}
-          uploading={isProcessing && selectedScenario === "custom"}
-          onFile={handleFile}
-        />
+        <div className="rounded-xl border border-black/5 bg-white p-4">
+          <div className="mb-3 flex items-baseline justify-between">
+            <h2 className="text-sm font-semibold text-neutral-ink">
+              Ou envie documentos reais
+            </h2>
+            <span className="text-[11px] text-neutral-muted">XML ou PDF</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <UploadZone
+              label="Nota fiscal"
+              hint="NFe, NFSe ou CTe (obrigatório)"
+              disabled={isProcessing}
+              file={invoiceFile}
+              onFile={setInvoiceFile}
+              onClear={() => setInvoiceFile(null)}
+            />
+            <UploadZone
+              label="Purchase Order"
+              hint="PDF ou XML do pedido (opcional)"
+              disabled={isProcessing}
+              file={poFile}
+              onFile={setPoFile}
+              onClear={() => setPoFile(null)}
+              optional
+            />
+          </div>
+          <Button
+            type="button"
+            onClick={handleProcess}
+            disabled={!invoiceFile || isProcessing}
+            className="mt-3 w-full bg-brand-teal hover:bg-brand-teal-dark"
+          >
+            <Play className="h-4 w-4" aria-hidden />
+            {poFile
+              ? "Processar com 3-way match"
+              : invoiceFile
+                ? "Processar (sem 3-way match)"
+                : "Envie uma nota fiscal para começar"}
+          </Button>
+        </div>
 
         <AutonomyModeSelector
           value={autonomyMode}

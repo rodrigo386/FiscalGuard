@@ -29,6 +29,36 @@ interface RequestShape {
   fileName?: string;
   fileMime?: string;
   fileText?: string;
+  poFileName?: string;
+  poFileText?: string;
+}
+
+async function extractFileText(file: File): Promise<string> {
+  const mime = file.type;
+  const name = file.name.toLowerCase();
+  if (mime.includes("xml") || name.endsWith(".xml")) {
+    return file.text();
+  }
+  if (mime.includes("pdf") || name.endsWith(".pdf")) {
+    try {
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const pdfParse = (await import("pdf-parse")).default;
+      const result = await pdfParse(buffer);
+      const text = result.text?.trim() ?? "";
+      if (!text) {
+        return `(PDF sem camada de texto extraível — ${file.name}, ${file.size} bytes · provavelmente imagem escaneada)`;
+      }
+      return text.length > 20_000 ? text.slice(0, 20_000) : text;
+    } catch (err) {
+      logger.error({ err, name: file.name }, "Falha ao parsear PDF");
+      return `(falha ao parsear PDF ${file.name}: ${(err as Error).message})`;
+    }
+  }
+  try {
+    return await file.text();
+  } catch {
+    return `(conteúdo binário não extraído — ${file.name}, ${file.size} bytes)`;
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -99,19 +129,30 @@ async function parseRequest(req: NextRequest): Promise<RequestShape> {
     const autonomyMode =
       (form.get("autonomyMode") as AutonomyMode) ?? "score_based";
     const file = form.get("file");
+    const poFile = form.get("poFile");
     let fileName: string | undefined;
     let fileMime: string | undefined;
     let fileText: string | undefined;
+    let poFileName: string | undefined;
+    let poFileText: string | undefined;
     if (file instanceof File) {
       fileName = file.name;
       fileMime = file.type;
-      if (file.type.includes("xml") || file.name.toLowerCase().endsWith(".xml")) {
-        fileText = await file.text();
-      } else {
-        fileText = `(conteúdo binário não extraído na demo — ${file.name}, ${file.size} bytes)`;
-      }
+      fileText = await extractFileText(file);
     }
-    return { scenario, autonomyMode, fileName, fileMime, fileText };
+    if (poFile instanceof File) {
+      poFileName = poFile.name;
+      poFileText = await extractFileText(poFile);
+    }
+    return {
+      scenario,
+      autonomyMode,
+      fileName,
+      fileMime,
+      fileText,
+      poFileName,
+      poFileText,
+    };
   }
   const body = await req.json();
   return {
@@ -428,42 +469,76 @@ async function runCustomPipeline({
     },
   });
 
-  // 3. Simulated 3-way match (PO 3% abaixo)
-  const po = simulatePO(extractedInvoice);
-  const gr = simulateGR(extractedInvoice);
-  const match = simulateMatch(extractedInvoice, po);
-  emit({ type: "po", payload: po });
-  emit({ type: "gr", payload: gr });
-  emit({
-    type: "step",
-    payload: {
-      step: "three_way_match",
-      title: "3-Way Match",
-      status: "processing",
-    },
-  });
-  await delay(jitter(900));
-  emit({ type: "match", payload: match });
-  emit({
-    type: "step",
-    payload: {
-      step: "three_way_match",
-      title: "3-Way Match",
-      status: match.overall === "pass" ? "success" : "warning",
-      summary: `PO e documento de recebimento simulados na demo · divergência ${match.amountDiffPct.toFixed(1)}%`,
-      warning:
-        match.overall === "fail"
-          ? "Divergência acima da tolerância — PO simulada"
-          : undefined,
-    },
-  });
+  // 3. 3-way match — real se PO enviada, pulado se não
+  const hasPO = !!input.poFileText;
+  let po: PurchaseOrder | null = null;
+  let match: ThreeWayMatchResult | null = null;
 
-  // 4. Retentions (simulated)
+  if (hasPO) {
+    emit({
+      type: "step",
+      payload: {
+        step: "three_way_match",
+        title: "3-Way Match",
+        status: "processing",
+      },
+    });
+    try {
+      const extractedPO = await extractPOViaClaude(input, extractedInvoice);
+      po = extractedPO.po;
+      emit({ type: "trace", payload: extractedPO.trace });
+      emit({ type: "po", payload: po });
+
+      const gr = simulateGR(extractedInvoice);
+      emit({ type: "gr", payload: gr });
+
+      match = simulateMatch(extractedInvoice, po);
+      emit({ type: "match", payload: match });
+      emit({
+        type: "step",
+        payload: {
+          step: "three_way_match",
+          title: "3-Way Match",
+          status: match.overall === "pass" ? "success" : "warning",
+          summary: `PO extraída do documento enviado · divergência ${match.amountDiffPct.toFixed(1)}% · GR simulado (integração Oracle não conectada)`,
+          warning:
+            match.overall === "fail"
+              ? `Divergência de ${match.amountDiffPct.toFixed(1)}% acima da tolerância de 2%`
+              : undefined,
+        },
+      });
+    } catch (err) {
+      logger.error({ err }, "Falha na extração da PO via Claude");
+      emit({
+        type: "step",
+        payload: {
+          step: "three_way_match",
+          title: "3-Way Match",
+          status: "warning",
+          summary: "Não foi possível extrair a PO enviada",
+          warning: (err as Error).message,
+        },
+      });
+    }
+  } else {
+    emit({
+      type: "step",
+      payload: {
+        step: "three_way_match",
+        title: "3-Way Match",
+        status: "success",
+        summary:
+          "Etapa pulada — PO não enviada · análise segue apenas com extração fiscal e validação tributária",
+      },
+    });
+  }
+
+  // 4. Validação Tributária (heurística)
   emit({
     type: "step",
     payload: {
       step: "retentions",
-      title: "Validação de Retenções",
+      title: "Validação Tributária",
       status: "processing",
     },
   });
@@ -474,9 +549,9 @@ async function runCustomPipeline({
     type: "step",
     payload: {
       step: "retentions",
-      title: "Validação de Retenções",
+      title: "Validação Tributária",
       status: "success",
-      summary: "Retenções simuladas com base na extração (simulado na demo)",
+      summary: "Tributos calculados heuristicamente a partir da extração · tabela oficial por município/NCM não integrada na demo",
     },
   });
 
@@ -494,6 +569,7 @@ async function runCustomPipeline({
     po,
     match,
     autonomyMode: input.autonomyMode,
+    hasPO,
   });
   emit({ type: "trace", payload: decisionTrace });
   emit({ type: "decision", payload: decision });
@@ -503,7 +579,7 @@ async function runCustomPipeline({
       step: "decision",
       title: "Decisão Final",
       status: decision.action === "POSTED" ? "success" : "warning",
-      summary: `${decision.action} · ${decision.confidence}%`,
+      summary: `${decision.action} · ${decision.confidence}%${hasPO ? "" : " · sem 3-way match"}`,
     },
   });
 
@@ -568,32 +644,115 @@ async function extractInvoiceViaClaude(
   return { invoice, trace };
 }
 
+async function extractPOViaClaude(
+  input: RequestShape,
+  invoice: Invoice
+): Promise<{ po: PurchaseOrder; trace: ClaudeTrace }> {
+  const system =
+    "Você é um extrator de dados de purchase orders (pedidos de compra) brasileiros. Responda APENAS um objeto JSON (sem texto adicional, sem markdown). Preencha campos ausentes com null.";
+  const user = [
+    "Extraia do documento de PO abaixo os campos em JSON com as chaves:",
+    "{ numero, cnpjFornecedor, valorTotal, quantidade, precoUnitario, toleranciaPct }",
+    `A nota fiscal associada tem valor bruto ${formatBRL(invoice.grossAmount)} e fornecedor ${invoice.supplier.name} (CNPJ ${invoice.supplier.cnpj}).`,
+    "",
+    "Conteúdo da PO:",
+    (input.poFileText ?? "").slice(0, 8000),
+  ].join("\n");
+
+  const result = await callClaude({
+    system,
+    user,
+    maxTokens: 600,
+    temperature: 0.1,
+  });
+  const json = tryParseJson(result.text) as
+    | {
+        numero?: string;
+        cnpjFornecedor?: string;
+        valorTotal?: number | string;
+        quantidade?: number | string;
+        precoUnitario?: number | string;
+        toleranciaPct?: number | string;
+      }
+    | null;
+
+  const po: PurchaseOrder = {
+    id: `po-ext-${Date.now()}`,
+    number: json?.numero?.toString() ?? `PO-CUSTOM-${Date.now().toString().slice(-6)}`,
+    supplierCnpj:
+      json?.cnpjFornecedor?.toString() ?? invoice.supplier.cnpj ?? "—",
+    totalAmount: Number(json?.valorTotal ?? invoice.grossAmount) || invoice.grossAmount,
+    quantity: json?.quantidade ? Number(json.quantidade) : undefined,
+    unitPrice: json?.precoUnitario ? Number(json.precoUnitario) : undefined,
+    toleranceBps: json?.toleranciaPct ? Number(json.toleranciaPct) * 100 : 200,
+  };
+
+  return {
+    po,
+    trace: {
+      step: "three_way_match",
+      model: result.model,
+      promptPreview: user.slice(0, 600),
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      latencyMs: result.latencyMs,
+      simulated: false,
+    },
+  };
+}
+
 async function decideCustom({
   invoice,
   po,
   match,
   autonomyMode,
+  hasPO,
 }: {
   invoice: Invoice;
-  po: PurchaseOrder;
-  match: ThreeWayMatchResult;
+  po: PurchaseOrder | null;
+  match: ThreeWayMatchResult | null;
   autonomyMode: AutonomyMode;
+  hasPO: boolean;
 }): Promise<{ decision: FinalDecision; trace: ClaudeTrace }> {
   const system =
-    "Você é um analista sênior de contas a pagar. Explique em português (2-3 frases) a decisão sobre a nota fiscal com base nos dados fornecidos. Sem jargão técnico. Se houver divergência, diga o que o analista deve verificar.";
-  const user = [
+    "Você é um analista sênior de contas a pagar. Explique em português (2-3 frases) a decisão sobre a nota fiscal com base nos dados fornecidos. Sem jargão técnico. Se houver divergência, diga o que o analista deve verificar. Se o 3-way match foi pulado (PO ausente), deixe claro que a aprovação é parcial e depende de confirmação do pedido.";
+
+  const contextLines = [
     `Nota ${invoice.type} ${invoice.number} — ${invoice.supplier.name}`,
     `Valor: ${formatBRL(invoice.grossAmount)}`,
-    `PO simulada: ${po.number} · ${formatBRL(po.totalAmount)} (tolerância 2%)`,
-    `Diferença: ${match.amountDiffPct.toFixed(1)}%`,
     `Modo: ${describeMode(autonomyMode)}`,
-    "",
-    "Escreva a explicação executiva.",
-  ].join("\n");
+  ];
+  if (hasPO && po && match) {
+    contextLines.push(
+      `PO extraída: ${po.number} · ${formatBRL(po.totalAmount)} (tolerância 2%)`,
+      `Diferença: ${match.amountDiffPct.toFixed(1)}%`
+    );
+  } else {
+    contextLines.push(
+      "3-way match: não realizado (PO não enviada pelo usuário)",
+      "Análise restrita à extração fiscal e validação tributária"
+    );
+  }
+  contextLines.push("", "Escreva a explicação executiva.");
+  const user = contextLines.join("\n");
 
-  const action: FinalDecision["action"] =
-    match.overall === "fail" ? "HUMAN_REVIEW" : "POSTED";
-  const confidence = match.overall === "fail" ? 78 : 93;
+  let action: FinalDecision["action"];
+  let confidence: number;
+  let flags: string[];
+
+  if (!hasPO) {
+    action = "HUMAN_REVIEW";
+    confidence = 65;
+    flags = ["match.po.missing"];
+  } else if (match && match.overall === "fail") {
+    action = "HUMAN_REVIEW";
+    confidence = 78;
+    flags = ["match.amount.diff"];
+  } else {
+    action = "POSTED";
+    confidence = 93;
+    flags = [];
+  }
 
   try {
     const result = await callClaude({
@@ -602,16 +761,21 @@ async function decideCustom({
       maxTokens: 350,
       temperature: 0.4,
     });
+    const fallbackSummary =
+      action === "POSTED"
+        ? "Aprovação automática"
+        : hasPO
+          ? "Revisão humana — divergência 3-way match"
+          : "Revisão humana — PO não enviada";
     return {
       decision: {
         action,
         confidence,
-        summary:
-          action === "POSTED" ? "Aprovação automática (simulada)" : "Revisão humana",
+        summary: fallbackSummary,
         justification:
           result.text ||
-          "Documento processado com dados simulados na demo. PO e retenções foram inferidas.",
-        flags: match.overall === "fail" ? ["match.amount.diff"] : [],
+          "Documento processado. Dados fiscais extraídos via Claude e tributos calculados heuristicamente.",
+        flags,
       },
       trace: {
         step: "decision",
@@ -674,17 +838,6 @@ function buildFallbackInvoice(
     },
     description: input.fileName ?? "Documento enviado",
     grossAmount: 10000,
-  };
-}
-
-function simulatePO(invoice: Invoice): PurchaseOrder {
-  const total = Math.round(invoice.grossAmount * 0.97 * 100) / 100;
-  return {
-    id: `po-sim-${Date.now()}`,
-    number: `PO-SIM-${String(Math.floor(Math.random() * 9000 + 1000))}`,
-    supplierCnpj: invoice.supplier.cnpj,
-    totalAmount: total,
-    toleranceBps: 200,
   };
 }
 

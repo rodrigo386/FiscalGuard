@@ -9,7 +9,12 @@ export function useSSEProcessing() {
   const abortRef = useRef<AbortController | null>(null);
 
   const runScenario = useCallback(
-    async (scenario: ScenarioKey, autonomyMode: AutonomyMode, file?: File) => {
+    async (
+      scenario: ScenarioKey,
+      autonomyMode: AutonomyMode,
+      file?: File,
+      poFile?: File
+    ) => {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -24,6 +29,7 @@ export function useSSEProcessing() {
           fd.set("scenario", scenario);
           fd.set("autonomyMode", autonomyMode);
           fd.set("file", file);
+          if (poFile) fd.set("poFile", poFile);
           body = fd;
           headers = {};
         } else {
