@@ -29,6 +29,7 @@ export function SiteNavbar() {
           </Link>
           <nav className="hidden items-center gap-1 text-sm font-medium text-neutral-ink/80 md:flex">
             <NavLink href="/demo">Demo</NavLink>
+            <NavLink href="/live">Ao vivo</NavLink>
             <NavLink href="/dashboard">Dashboard</NavLink>
           </nav>
         </div>
