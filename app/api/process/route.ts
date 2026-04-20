@@ -37,20 +37,42 @@ async function extractFileText(file: File): Promise<string> {
   const mime = file.type;
   const name = file.name.toLowerCase();
   if (mime.includes("xml") || name.endsWith(".xml")) {
-    return file.text();
+    const text = await file.text();
+    logger.info(
+      { file: file.name, size: file.size, extractedChars: text.length },
+      "XML extraído"
+    );
+    return text;
   }
   if (mime.includes("pdf") || name.endsWith(".pdf")) {
     try {
       const buffer = Buffer.from(await file.arrayBuffer());
-      const pdfParse = (await import("pdf-parse")).default;
+      // Importa direto de lib/pdf-parse.js para evitar o bloco de debug do
+      // index.js de pdf-parse@1.1.1 que tenta ler um PDF de teste inexistente
+      // em produção (ENOENT).
+      const mod = await import("pdf-parse/lib/pdf-parse.js");
+      const pdfParse = mod.default ?? (mod as unknown as typeof mod.default);
       const result = await pdfParse(buffer);
       const text = result.text?.trim() ?? "";
+      logger.info(
+        {
+          file: file.name,
+          size: file.size,
+          pages: result.numpages,
+          extractedChars: text.length,
+          preview: text.slice(0, 120),
+        },
+        "PDF extraído"
+      );
       if (!text) {
-        return `(PDF sem camada de texto extraível — ${file.name}, ${file.size} bytes · provavelmente imagem escaneada)`;
+        return `(PDF sem camada de texto extraível — ${file.name}, ${file.size} bytes · provavelmente imagem escaneada. Sugestão: aplicar OCR antes de enviar.)`;
       }
       return text.length > 20_000 ? text.slice(0, 20_000) : text;
     } catch (err) {
-      logger.error({ err, name: file.name }, "Falha ao parsear PDF");
+      logger.error(
+        { err, name: file.name, stack: (err as Error)?.stack },
+        "Falha ao parsear PDF"
+      );
       return `(falha ao parsear PDF ${file.name}: ${(err as Error).message})`;
     }
   }
@@ -404,6 +426,39 @@ async function runCustomPipeline({
     },
   });
 
+  const rawTextLen = input.fileText?.length ?? 0;
+  const rawTextIsError = (input.fileText ?? "").startsWith("(");
+  emit({
+    type: "audit",
+    payload: {
+      timestamp: new Date().toISOString(),
+      step: "intake",
+      action: rawTextIsError
+        ? "Falha ao extrair texto do arquivo"
+        : `Texto bruto do arquivo: ${rawTextLen} caracteres`,
+      detail: rawTextIsError
+        ? input.fileText
+        : (input.fileText ?? "").slice(0, 160).replace(/\s+/g, " "),
+    },
+  });
+  if (input.poFileText) {
+    const poTextLen = input.poFileText.length;
+    const poIsError = input.poFileText.startsWith("(");
+    emit({
+      type: "audit",
+      payload: {
+        timestamp: new Date().toISOString(),
+        step: "intake",
+        action: poIsError
+          ? "Falha ao extrair texto da PO"
+          : `Texto bruto da PO: ${poTextLen} caracteres`,
+        detail: poIsError
+          ? input.poFileText
+          : input.poFileText.slice(0, 160).replace(/\s+/g, " "),
+      },
+    });
+  }
+
   // 1. Intake
   emit({
     type: "step",
@@ -458,13 +513,24 @@ async function runCustomPipeline({
 
   emit({ type: "invoice", payload: extractedInvoice });
   emit({ type: "trace", payload: extractionTrace });
+  const extractionOk =
+    extractedInvoice.grossAmount > 0 &&
+    extractedInvoice.supplier.cnpj !== "—" &&
+    !rawTextIsError;
   emit({
     type: "step",
     payload: {
       step: "extraction",
       title: "Extração Fiscal",
-      status: "success",
-      summary: `Campos extraídos via Claude Sonnet${extractionTrace.simulated ? " (simulado na demo)" : ""}`,
+      status: extractionOk ? "success" : "warning",
+      summary: extractionOk
+        ? `Campos extraídos via Claude Sonnet${extractionTrace.simulated ? " (simulado na demo)" : ""}`
+        : rawTextIsError
+          ? "Não foi possível ler o arquivo enviado — veja detalhe no log técnico"
+          : "Claude não conseguiu estruturar os dados fiscais do arquivo",
+      warning: extractionOk
+        ? undefined
+        : "Extração incompleta — confira se o PDF tem camada de texto (não é imagem escaneada) e se o arquivo não está criptografado",
       payload: extractedInvoice as unknown as Record<string, unknown>,
     },
   });
