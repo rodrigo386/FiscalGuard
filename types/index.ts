@@ -51,12 +51,15 @@ export interface PurchaseOrder {
   toleranceBps: number; // basis points (200 = 2%)
 }
 
+export type ReceiptKind = "goods_receipt" | "service_entry" | "delivery_proof";
+
 export interface GoodsReceipt {
   id: string;
   number: string;
   confirmedAt: string; // ISO
   quantity?: number;
   status: "confirmed" | "pending" | "partial";
+  kind: ReceiptKind;
 }
 
 export type MatchFieldStatus = "match" | "mismatch" | "na";

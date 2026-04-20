@@ -46,7 +46,10 @@ export function AgentTimeline() {
               <ExtractionPreview />
             ) : null}
             {step.step === "three_way_match" && state.match ? (
-              <ThreeWayMatchView match={state.match} />
+              <ThreeWayMatchView
+                match={state.match}
+                receiptKind={state.goodsReceipt?.kind}
+              />
             ) : null}
             {step.step === "retentions" && state.retentions.length ? (
               <RetentionsTable retentions={state.retentions} />

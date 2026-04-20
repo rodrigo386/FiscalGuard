@@ -450,7 +450,7 @@ async function runCustomPipeline({
       step: "three_way_match",
       title: "3-Way Match",
       status: match.overall === "pass" ? "success" : "warning",
-      summary: `PO e GR simulados na demo · divergência ${match.amountDiffPct.toFixed(1)}%`,
+      summary: `PO e documento de recebimento simulados na demo · divergência ${match.amountDiffPct.toFixed(1)}%`,
       warning:
         match.overall === "fail"
           ? "Divergência acima da tolerância — PO simulada"
@@ -689,11 +689,31 @@ function simulatePO(invoice: Invoice): PurchaseOrder {
 }
 
 function simulateGR(invoice: Invoice): GoodsReceipt {
+  const suffix = String(Math.floor(Math.random() * 9000 + 1000));
+  if (invoice.type === "NFSe") {
+    return {
+      id: `ses-sim-${Date.now()}`,
+      number: `SES-SIM-${suffix}`,
+      confirmedAt: invoice.issueDate,
+      status: "confirmed",
+      kind: "service_entry",
+    };
+  }
+  if (invoice.type === "CTe") {
+    return {
+      id: `ce-sim-${Date.now()}`,
+      number: `CE-SIM-${suffix}`,
+      confirmedAt: invoice.issueDate,
+      status: "confirmed",
+      kind: "delivery_proof",
+    };
+  }
   return {
     id: `gr-sim-${Date.now()}`,
-    number: `GR-SIM-${String(Math.floor(Math.random() * 9000 + 1000))}`,
+    number: `GR-SIM-${suffix}`,
     confirmedAt: invoice.issueDate,
     status: "confirmed",
+    kind: "goods_receipt",
   };
 }
 

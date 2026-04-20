@@ -1,21 +1,24 @@
 "use client";
 
 import { Check, X } from "lucide-react";
-import type { ThreeWayMatchResult } from "@/types";
+import type { ReceiptKind, ThreeWayMatchResult } from "@/types";
+import { receiptLabel } from "@/lib/scenarios";
 import { cn } from "@/lib/utils";
 
 interface Props {
   match: ThreeWayMatchResult;
+  receiptKind?: ReceiptKind;
 }
 
-export function ThreeWayMatchView({ match }: Props) {
+export function ThreeWayMatchView({ match, receiptKind = "goods_receipt" }: Props) {
+  const receipt = receiptLabel(receiptKind);
   return (
     <div className="overflow-hidden rounded-lg border border-black/5 bg-neutral-bg">
       <div className="grid grid-cols-[1fr_repeat(3,minmax(0,1fr))_auto] gap-x-3 bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-muted">
         <span>Campo</span>
         <span>Nota fiscal</span>
         <span>Purchase Order</span>
-        <span>Goods Receipt</span>
+        <span title={receipt.long}>{receipt.long}</span>
         <span>Status</span>
       </div>
       <ul>

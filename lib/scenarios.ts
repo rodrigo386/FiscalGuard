@@ -5,10 +5,23 @@ import type {
   GoodsReceipt,
   Invoice,
   PurchaseOrder,
+  ReceiptKind,
   Retention,
   ScenarioKey,
   ThreeWayMatchResult,
 } from "@/types";
+
+export function receiptLabel(kind: ReceiptKind): { long: string; short: string } {
+  switch (kind) {
+    case "service_entry":
+      return { long: "Service Entry Sheet", short: "SES" };
+    case "delivery_proof":
+      return { long: "Canhoto de Entrega", short: "CE" };
+    case "goods_receipt":
+    default:
+      return { long: "Goods Receipt", short: "GR" };
+  }
+}
 
 export interface ScenarioBundle {
   key: Exclude<ScenarioKey, "custom">;
@@ -73,10 +86,11 @@ function buildHappyScenario(): ScenarioBundle {
   };
 
   const goodsReceipt: GoodsReceipt = {
-    id: "gr-happy",
-    number: "GR-2026-005678",
+    id: "ses-happy",
+    number: "SES-2026-005678",
     confirmedAt: isoToday(18),
     status: "confirmed",
+    kind: "service_entry",
   };
 
   const match: ThreeWayMatchResult = {
@@ -96,12 +110,12 @@ function buildHappyScenario(): ScenarioBundle {
         status: "match",
       },
       {
-        label: "Goods Receipt",
+        label: "Service Entry Sheet",
         invoice: invoice.number,
         po: purchaseOrder.number,
         gr: goodsReceipt.number,
         status: "match",
-        note: "Confirmado em 18/04/2026",
+        note: "Serviço atestado em 18/04/2026",
       },
     ],
   };
@@ -140,7 +154,7 @@ function buildHappyScenario(): ScenarioBundle {
     confidence: 97,
     summary: "Aprovação automática",
     justification:
-      "Nota aderente ao PO, GR confirmada e todas as retenções conferem com o cálculo do agente.",
+      "Nota aderente ao PO, evidência de serviço (SES) atestada e todas as retenções conferem com o cálculo do agente.",
     flags: [],
   };
 
@@ -170,7 +184,7 @@ function buildHappyScenario(): ScenarioBundle {
       step: "three_way_match",
       title: "3-Way Match",
       status: "success",
-      summary: "NF × PO × GR — match em todos os campos",
+      summary: "NF × PO × SES — match em todos os campos",
     },
     {
       step: "retentions",
@@ -186,13 +200,13 @@ function buildHappyScenario(): ScenarioBundle {
     },
   ];
 
-  const audit = defaultAudit("happy");
+  const audit = defaultAudit("happy", goodsReceipt.kind);
   return {
     key: "happy",
     title: "100% Compliance — NFSe Portuário",
     shortLabel: "100% Compliance",
     description:
-      "Movimentação portuária R$ 47.500. PO e GR encontrados, retenções corretas. Aprovação automática.",
+      "Movimentação portuária R$ 47.500. PO e evidência de serviço encontrados, retenções corretas. Aprovação automática.",
     expectedStatus: "POSTED",
     expectedScore: 97,
     invoice,
@@ -233,10 +247,11 @@ function buildTaxExceptionScenario(): ScenarioBundle {
   };
 
   const goodsReceipt: GoodsReceipt = {
-    id: "gr-tax",
-    number: "GR-2026-008234",
+    id: "ce-tax",
+    number: "CE-2026-008234",
     confirmedAt: isoToday(19),
     status: "confirmed",
+    kind: "delivery_proof",
   };
 
   const match: ThreeWayMatchResult = {
@@ -256,11 +271,12 @@ function buildTaxExceptionScenario(): ScenarioBundle {
         status: "match",
       },
       {
-        label: "Goods Receipt",
+        label: "Canhoto de Entrega",
         invoice: invoice.number,
         po: purchaseOrder.number,
         gr: goodsReceipt.number,
         status: "match",
+        note: "Protocolo de entrega confirmado em Campinas",
       },
     ],
   };
@@ -328,7 +344,7 @@ function buildTaxExceptionScenario(): ScenarioBundle {
       step: "three_way_match",
       title: "3-Way Match",
       status: "success",
-      summary: "NF × PO × GR — match em todos os campos",
+      summary: "NF × PO × Canhoto de Entrega — match em todos os campos",
     },
     {
       step: "retentions",
@@ -361,7 +377,7 @@ function buildTaxExceptionScenario(): ScenarioBundle {
     retentions,
     decision,
     steps,
-    audit: defaultAudit("tax_exception"),
+    audit: defaultAudit("tax_exception", goodsReceipt.kind),
   };
 }
 
@@ -400,6 +416,7 @@ function buildMatchDivergenceScenario(): ScenarioBundle {
     confirmedAt: isoToday(20),
     quantity: 12,
     status: "confirmed",
+    kind: "goods_receipt",
   };
 
   const match: ThreeWayMatchResult = {
@@ -531,20 +548,26 @@ function buildMatchDivergenceScenario(): ScenarioBundle {
     retentions,
     decision,
     steps,
-    audit: defaultAudit("match_divergence"),
+    audit: defaultAudit("match_divergence", goodsReceipt.kind),
   };
 }
 
-function defaultAudit(key: string): AuditEvent[] {
+function defaultAudit(key: string, kind: ReceiptKind): AuditEvent[] {
   const base = Date.now();
   const t = (offset: number) => new Date(base + offset).toISOString();
+  const receiptLocated =
+    kind === "service_entry"
+      ? "SES localizada"
+      : kind === "delivery_proof"
+        ? "Canhoto de entrega confirmado"
+        : "GR localizada";
   return [
     { timestamp: t(0), step: "intake", action: "Documento recebido", detail: key },
     { timestamp: t(120), step: "intake", action: "Classificação concluída" },
     { timestamp: t(620), step: "extraction", action: "Extração iniciada" },
     { timestamp: t(1450), step: "extraction", action: "Campos fiscais extraídos" },
     { timestamp: t(2100), step: "three_way_match", action: "Busca de PO no Oracle" },
-    { timestamp: t(2600), step: "three_way_match", action: "GR localizada" },
+    { timestamp: t(2600), step: "three_way_match", action: receiptLocated },
     { timestamp: t(3300), step: "retentions", action: "Retenções recalculadas" },
     { timestamp: t(4200), step: "decision", action: "Score consolidado" },
   ];

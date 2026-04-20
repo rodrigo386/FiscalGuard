@@ -90,8 +90,8 @@ export default function LandingPage() {
               1 · 100% Compliance
             </div>
             <p className="mt-1 text-neutral-muted">
-              NFSe portuária com PO, GR e retenções corretas — aprovação
-              automática.
+              NFSe portuária com PO, evidência de serviço e retenções
+              corretas — aprovação automática.
             </p>
           </li>
           <li className="rounded-lg border border-black/5 bg-neutral-bg p-4">
