@@ -87,7 +87,7 @@ export default function LandingPage() {
         <ol className="mt-4 grid gap-4 text-sm text-neutral-ink md:grid-cols-3">
           <li className="rounded-lg border border-black/5 bg-neutral-bg p-4">
             <div className="font-semibold text-brand-purple">
-              1 · Caminho feliz
+              1 · 100% Compliance
             </div>
             <p className="mt-1 text-neutral-muted">
               NFSe portuária com PO, GR e retenções corretas — aprovação

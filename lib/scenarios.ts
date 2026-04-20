@@ -189,8 +189,8 @@ function buildHappyScenario(): ScenarioBundle {
   const audit = defaultAudit("happy");
   return {
     key: "happy",
-    title: "Caminho feliz — NFSe Portuário",
-    shortLabel: "Caminho feliz",
+    title: "100% Compliance — NFSe Portuário",
+    shortLabel: "100% Compliance",
     description:
       "Movimentação portuária R$ 47.500. PO e GR encontrados, retenções corretas. Aprovação automática.",
     expectedStatus: "POSTED",
