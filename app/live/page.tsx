@@ -2,20 +2,45 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CheckCircle2, FileText, Play, RotateCcw, AlertTriangle } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  CircleCheck,
+  FileText,
+  Play,
+  RotateCcw,
+  ShieldCheck,
+  ThumbsUp,
+  ThumbsDown,
+  XCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   LIVE_CONFIG,
   LIVE_NOTES,
   LIVE_STAGES,
   type LiveNote,
+  type LiveTaxLine,
 } from "@/lib/live-notes";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/scenarios";
 
+type ManualDecision = "approved" | "rejected";
+
 export default function LivePage() {
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [tick, setTick] = useState(0);
+  const [decisions, setDecisions] = useState<Record<string, ManualDecision>>(
+    {}
+  );
+  const [openNoteId, setOpenNoteId] = useState<string | null>(null);
   const intervalRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -29,10 +54,10 @@ export default function LivePage() {
     };
   }, [startedAt]);
 
+  void tick;
+
   const now = Date.now();
   const elapsed = startedAt === null ? 0 : now - startedAt;
-  // força re-render com tick — valor não é usado diretamente
-  void tick;
 
   const notes = useMemo(
     () =>
@@ -51,28 +76,58 @@ export default function LivePage() {
 
   const visible = notes.filter((n) => n.displayed);
   const completed = visible.filter((n) => n.stage >= LIVE_STAGES.length);
-  const posted = completed.filter((n) => n.note.finalStatus === "POSTED");
-  const review = completed.filter(
-    (n) => n.note.finalStatus === "HUMAN_REVIEW"
+
+  // POSTED auto = agente aprovou sem intervenção
+  const postedAuto = completed.filter(
+    (n) => n.note.finalStatus === "POSTED"
   );
+  // Revisões que ainda pendem de ação
+  const reviewPending = completed.filter(
+    (n) => n.note.finalStatus === "HUMAN_REVIEW" && !decisions[n.note.id]
+  );
+  // Aprovadas manualmente pelo analista
+  const approvedManual = completed.filter(
+    (n) =>
+      n.note.finalStatus === "HUMAN_REVIEW" &&
+      decisions[n.note.id] === "approved"
+  );
+  // Rejeitadas pelo analista
+  const rejected = completed.filter(
+    (n) =>
+      n.note.finalStatus === "HUMAN_REVIEW" &&
+      decisions[n.note.id] === "rejected"
+  );
+
   const allDone =
     startedAt !== null && completed.length === LIVE_CONFIG.total;
+  const touchlessRate = completed.length
+    ? Math.round((postedAuto.length / completed.length) * 100)
+    : 0;
+
+  const totalSeconds =
+    LIVE_CONFIG.total * LIVE_CONFIG.arrivalIntervalMs + 5_000;
+  const progressPct = Math.min(100, (elapsed / totalSeconds) * 100);
+
+  const openNote = openNoteId
+    ? LIVE_NOTES.find((n) => n.id === openNoteId) ?? null
+    : null;
+  const openNoteStage = notes.find((n) => n.note.id === openNoteId)?.stage ?? 0;
 
   const start = () => {
     setStartedAt(Date.now());
     setTick(0);
+    setDecisions({});
   };
   const reset = () => {
     setStartedAt(null);
     setTick(0);
+    setDecisions({});
+    setOpenNoteId(null);
   };
 
-  const totalSeconds = Math.min(
-    LIVE_CONFIG.total * LIVE_CONFIG.arrivalIntervalMs +
-      LIVE_STAGES.length * LIVE_CONFIG.stageDurationMs,
-    LIVE_CONFIG.total * LIVE_CONFIG.arrivalIntervalMs + 5_000
-  );
-  const progressPct = Math.min(100, (elapsed / totalSeconds) * 100);
+  const act = (noteId: string, decision: ManualDecision) => {
+    setDecisions((prev) => ({ ...prev, [noteId]: decision }));
+  };
 
   return (
     <div className="flex flex-col gap-6 pt-4">
@@ -84,9 +139,10 @@ export default function LivePage() {
           10 notas em 100 segundos
         </h1>
         <p className="mt-1 max-w-2xl text-sm text-neutral-muted">
-          Simulação de um turno operacional. Uma nota chega a cada 10 segundos
-          e passa pelos 5 sub-agentes. Acompanhe o throughput, a taxa
-          touchless e as notas encaminhadas para revisão humana.
+          Simulação de um turno operacional. Uma nota chega a cada
+          10 segundos e passa pelos 5 sub-agentes. Clique em uma linha
+          para ver o detalhe; notas em revisão ficam prontas para
+          decisão do analista.
         </p>
       </header>
 
@@ -119,22 +175,28 @@ export default function LivePage() {
           tone="neutral"
         />
         <StatChip
-          label="POSTED"
-          value={String(posted.length)}
+          label="Auto (POSTED)"
+          value={String(postedAuto.length)}
           tone="success"
         />
         <StatChip
-          label="Revisão humana"
-          value={String(review.length)}
+          label="Pendentes"
+          value={String(reviewPending.length)}
           tone="warning"
         />
         <StatChip
+          label="Aprovadas manual"
+          value={String(approvedManual.length)}
+          tone="success"
+        />
+        <StatChip
+          label="Rejeitadas"
+          value={String(rejected.length)}
+          tone="error"
+        />
+        <StatChip
           label="Touchless rate"
-          value={
-            completed.length
-              ? `${Math.round((posted.length / completed.length) * 100)}%`
-              : "—"
-          }
+          value={completed.length ? `${touchlessRate}%` : "—"}
           tone="neutral"
         />
         <div className="ml-auto flex items-center gap-2">
@@ -166,29 +228,69 @@ export default function LivePage() {
                   transition={{ duration: 0.3, ease: "easeOut" }}
                   className="will-animate"
                 >
-                  <NoteRow note={note} stage={stage} />
+                  <NoteRow
+                    note={note}
+                    stage={stage}
+                    decision={decisions[note.id]}
+                    onOpen={() => setOpenNoteId(note.id)}
+                  />
                 </motion.li>
               ))}
           </AnimatePresence>
         </ol>
       )}
 
-      {allDone ? <Summary posted={posted.length} review={review.length} /> : null}
+      {allDone ? (
+        <Summary
+          postedAuto={postedAuto.length}
+          approvedManual={approvedManual.length}
+          rejected={rejected.length}
+          pending={reviewPending.length}
+          touchless={touchlessRate}
+        />
+      ) : null}
+
+      <Sheet
+        open={!!openNoteId}
+        onOpenChange={(open) => !open && setOpenNoteId(null)}
+      >
+        <SheetContent side="right" className="w-[520px] sm:max-w-[520px] overflow-y-auto">
+          {openNote ? (
+            <NoteDetailContent
+              note={openNote}
+              stage={openNoteStage}
+              decision={decisions[openNote.id]}
+              onApprove={() => act(openNote.id, "approved")}
+              onReject={() => act(openNote.id, "rejected")}
+            />
+          ) : null}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
 
-function NoteRow({ note, stage }: { note: LiveNote; stage: number }) {
+function NoteRow({
+  note,
+  stage,
+  decision,
+  onOpen,
+}: {
+  note: LiveNote;
+  stage: number;
+  decision?: ManualDecision;
+  onOpen: () => void;
+}) {
   const done = stage >= LIVE_STAGES.length;
+  const finalClass = borderFor(note, decision, done);
   return (
-    <div
+    <button
+      type="button"
+      onClick={onOpen}
       className={cn(
-        "grid grid-cols-[auto_auto_minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border bg-white px-3 py-2.5 text-sm",
-        done
-          ? note.finalStatus === "POSTED"
-            ? "border-status-success/20"
-            : "border-status-warning/30"
-          : "border-brand-teal/30 shadow-card"
+        "group grid w-full grid-cols-[auto_auto_minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border bg-white px-3 py-2.5 text-left text-sm transition-all",
+        "hover:-translate-y-0.5 hover:shadow-card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal focus-visible:ring-offset-2",
+        finalClass
       )}
     >
       <span className="font-mono text-[11px] text-neutral-muted">
@@ -213,14 +315,29 @@ function NoteRow({ note, stage }: { note: LiveNote; stage: number }) {
         </span>
         <StageDots stage={stage} total={LIVE_STAGES.length} />
       </div>
-      <FinalChip note={note} done={done} />
-    </div>
+      <FinalChip note={note} done={done} decision={decision} />
+    </button>
   );
+}
+
+function borderFor(
+  note: LiveNote,
+  decision: ManualDecision | undefined,
+  done: boolean
+) {
+  if (!done) return "border-brand-teal/30 shadow-card";
+  if (note.finalStatus === "POSTED") return "border-status-success/20";
+  if (decision === "approved") return "border-status-success/30";
+  if (decision === "rejected") return "border-status-error/30";
+  return "border-status-warning/30";
 }
 
 function StageDots({ stage, total }: { stage: number; total: number }) {
   return (
-    <div className="flex items-center gap-1" aria-label={`Etapa ${stage} de ${total}`}>
+    <div
+      className="flex items-center gap-1"
+      aria-label={`Etapa ${stage} de ${total}`}
+    >
       {Array.from({ length: total }).map((_, i) => {
         const past = i < stage;
         const current = i === stage;
@@ -240,35 +357,55 @@ function StageDots({ stage, total }: { stage: number; total: number }) {
   );
 }
 
-function FinalChip({ note, done }: { note: LiveNote; done: boolean }) {
+function FinalChip({
+  note,
+  done,
+  decision,
+}: {
+  note: LiveNote;
+  done: boolean;
+  decision?: ManualDecision;
+}) {
   if (!done) {
     return (
-      <span className="inline-flex min-w-[120px] justify-center rounded-full bg-brand-teal-light px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-teal">
+      <span className="inline-flex min-w-[130px] justify-center rounded-full bg-brand-teal-light px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-teal">
         Processando…
       </span>
     );
   }
   if (note.finalStatus === "POSTED") {
     return (
-      <span className="inline-flex min-w-[120px] items-center justify-center gap-1 rounded-full bg-status-success-bg px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-status-success">
+      <span className="inline-flex min-w-[130px] items-center justify-center gap-1 rounded-full bg-status-success-bg px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-status-success">
         <CheckCircle2 className="h-3 w-3" aria-hidden />
         POSTED · {note.confidence}%
       </span>
     );
   }
   if (note.finalStatus === "HUMAN_REVIEW") {
+    if (decision === "approved") {
+      return (
+        <span className="inline-flex min-w-[130px] items-center justify-center gap-1 rounded-full bg-status-success-bg px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-status-success">
+          <ThumbsUp className="h-3 w-3" aria-hidden />
+          Aprovada manual
+        </span>
+      );
+    }
+    if (decision === "rejected") {
+      return (
+        <span className="inline-flex min-w-[130px] items-center justify-center gap-1 rounded-full bg-status-error-bg px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-status-error">
+          <ThumbsDown className="h-3 w-3" aria-hidden />
+          Rejeitada
+        </span>
+      );
+    }
     return (
-      <span className="inline-flex min-w-[120px] items-center justify-center gap-1 rounded-full bg-status-warning-bg px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-status-warning">
+      <span className="inline-flex min-w-[130px] items-center justify-center gap-1 rounded-full bg-status-warning-bg px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-status-warning">
         <AlertTriangle className="h-3 w-3" aria-hidden />
-        REVISÃO · {note.confidence}%
+        Revisão · {note.confidence}%
       </span>
     );
   }
-  return (
-    <span className="inline-flex min-w-[120px] justify-center rounded-full bg-status-error-bg px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-status-error">
-      REJEITADO · {note.confidence}%
-    </span>
-  );
+  return null;
 }
 
 function StatChip({
@@ -278,7 +415,7 @@ function StatChip({
 }: {
   label: string;
   value: string;
-  tone: "success" | "warning" | "neutral";
+  tone: "success" | "warning" | "neutral" | "error";
 }) {
   return (
     <div className="flex flex-col">
@@ -290,6 +427,7 @@ function StatChip({
           "text-lg font-semibold",
           tone === "success" && "text-status-success",
           tone === "warning" && "text-status-warning",
+          tone === "error" && "text-status-error",
           tone === "neutral" && "text-neutral-ink"
         )}
       >
@@ -310,9 +448,8 @@ function EmptyState({ onStart }: { onStart: () => void }) {
       </h2>
       <p className="max-w-md text-sm text-neutral-muted">
         Ao iniciar, 10 notas chegam à operação em ritmo de uma a cada
-        10 segundos. Cada uma percorre os 5 sub-agentes e termina em{" "}
-        <strong className="text-neutral-ink">POSTED</strong> ou encaminhada
-        para <strong className="text-neutral-ink">revisão humana</strong>.
+        10 segundos. As que caem em revisão humana esperam sua decisão
+        — clique na linha para ver o detalhe e aprovar ou rejeitar.
       </p>
       <Button
         onClick={onStart}
@@ -325,8 +462,19 @@ function EmptyState({ onStart }: { onStart: () => void }) {
   );
 }
 
-function Summary({ posted, review }: { posted: number; review: number }) {
-  const rate = Math.round((posted / LIVE_CONFIG.total) * 100);
+function Summary({
+  postedAuto,
+  approvedManual,
+  rejected,
+  pending,
+  touchless,
+}: {
+  postedAuto: number;
+  approvedManual: number;
+  rejected: number;
+  pending: number;
+  touchless: number;
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -336,19 +484,22 @@ function Summary({ posted, review }: { posted: number; review: number }) {
     >
       <div className="flex items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-teal text-white">
-          <CheckCircle2 className="h-5 w-5" aria-hidden />
+          <CircleCheck className="h-5 w-5" aria-hidden />
         </span>
         <div>
           <h3 className="text-base font-semibold text-neutral-ink">
             Rodada concluída · {LIVE_CONFIG.total} notas processadas
           </h3>
           <p className="mt-1 text-sm text-neutral-muted">
-            <strong className="text-neutral-ink">{posted}</strong> aprovadas
-            automaticamente,{" "}
-            <strong className="text-neutral-ink">{review}</strong> encaminhadas
-            para revisão humana. Touchless rate de{" "}
-            <strong className="text-brand-teal">{rate}%</strong> — dentro da
-            meta operacional para uma operação madura.
+            <strong className="text-status-success">{postedAuto}</strong>{" "}
+            aprovadas automaticamente,{" "}
+            <strong className="text-status-success">{approvedManual}</strong>{" "}
+            aprovadas manualmente,{" "}
+            <strong className="text-status-error">{rejected}</strong>{" "}
+            rejeitadas,{" "}
+            <strong className="text-status-warning">{pending}</strong>{" "}
+            ainda pendentes. Touchless rate de{" "}
+            <strong className="text-brand-teal">{touchless}%</strong>.
           </p>
         </div>
       </div>
@@ -356,3 +507,302 @@ function Summary({ posted, review }: { posted: number; review: number }) {
   );
 }
 
+function NoteDetailContent({
+  note,
+  stage,
+  decision,
+  onApprove,
+  onReject,
+}: {
+  note: LiveNote;
+  stage: number;
+  decision?: ManualDecision;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  const done = stage >= LIVE_STAGES.length;
+  const { detail } = note;
+  const needsDecision =
+    done && note.finalStatus === "HUMAN_REVIEW" && !decision;
+  return (
+    <>
+      <SheetHeader>
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1 rounded-md bg-neutral-bg px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-ink/70">
+            <FileText className="h-3 w-3" aria-hidden />
+            {note.type}
+          </span>
+          <span className="font-mono text-[11px] text-neutral-muted">
+            {note.arrivedAt}
+          </span>
+        </div>
+        <SheetTitle className="truncate">{note.supplier}</SheetTitle>
+        <SheetDescription className="text-xs">
+          {detail.number} · CNPJ {detail.cnpj} · Valor bruto{" "}
+          <span className="font-mono">{formatBRL(note.amount)}</span>
+        </SheetDescription>
+      </SheetHeader>
+
+      <div className="mt-4 space-y-5">
+        {/* Status final / decisão */}
+        <div
+          className={cn(
+            "flex items-start gap-3 rounded-lg border p-3",
+            note.finalStatus === "POSTED"
+              ? "border-status-success/20 bg-status-success-bg"
+              : decision === "approved"
+                ? "border-status-success/20 bg-status-success-bg"
+                : decision === "rejected"
+                  ? "border-status-error/20 bg-status-error-bg"
+                  : "border-status-warning/30 bg-status-warning-bg"
+          )}
+        >
+          <StatusIcon note={note} decision={decision} done={done} />
+          <div className="min-w-0 flex-1 text-sm">
+            <div className="font-semibold text-neutral-ink">
+              {titleFor(note, decision, done)}
+            </div>
+            <div className="mt-1 text-xs text-neutral-muted">
+              Confiança do agente: <strong>{note.confidence}%</strong>
+              {note.reason ? ` · ${note.reason}` : ""}
+            </div>
+          </div>
+        </div>
+
+        {/* Justificativa + recomendação */}
+        <section>
+          <SectionTitle>Análise do agente</SectionTitle>
+          <p className="mt-2 text-sm leading-relaxed text-neutral-ink">
+            {detail.justification}
+          </p>
+          {detail.recommendation ? (
+            <div className="mt-3 rounded-md border border-brand-purple/20 bg-brand-purple-light/60 p-3 text-xs leading-relaxed text-brand-purple">
+              <div className="font-semibold uppercase tracking-wide">
+                Recomendação
+              </div>
+              <p className="mt-1 text-neutral-ink/80">{detail.recommendation}</p>
+            </div>
+          ) : null}
+        </section>
+
+        {/* Tributos */}
+        <section>
+          <SectionTitle>Validação tributária</SectionTitle>
+          <ul className="mt-2 divide-y divide-black/5 overflow-hidden rounded-md border border-black/5">
+            {detail.taxes.map((t) => (
+              <li
+                key={t.kind}
+                className="grid grid-cols-[1fr_auto_auto] items-start gap-3 bg-white px-3 py-2 text-sm"
+              >
+                <div className="min-w-0">
+                  <div className="font-semibold text-neutral-ink">{t.kind}</div>
+                  {t.note ? (
+                    <div className="text-[11px] leading-snug text-neutral-muted">
+                      {t.note}
+                    </div>
+                  ) : null}
+                </div>
+                <TaxValues t={t} />
+                <TaxStatus t={t} />
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* 3-way match */}
+        {detail.po || detail.receipt ? (
+          <section>
+            <SectionTitle>3-Way Match</SectionTitle>
+            <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-md bg-neutral-bg p-3 text-xs">
+              {detail.po ? (
+                <>
+                  <dt className="text-neutral-muted">Purchase Order</dt>
+                  <dd className="font-mono text-neutral-ink">
+                    {detail.po.number} · {formatBRL(detail.po.total)}
+                    {detail.po.diffPct !== 0 ? (
+                      <span className="ml-1 font-semibold text-status-error">
+                        (Δ {detail.po.diffPct.toFixed(1)}%)
+                      </span>
+                    ) : (
+                      <span className="ml-1 text-status-success">(match)</span>
+                    )}
+                  </dd>
+                  <dt className="text-neutral-muted">Tolerância</dt>
+                  <dd className="font-mono text-neutral-ink">
+                    {(detail.po.toleranceBps / 100).toFixed(1)}%
+                  </dd>
+                </>
+              ) : null}
+              {detail.receipt ? (
+                <>
+                  <dt className="text-neutral-muted">{detail.receipt.label}</dt>
+                  <dd className="font-mono text-neutral-ink">
+                    {detail.receipt.number}
+                  </dd>
+                </>
+              ) : null}
+            </dl>
+          </section>
+        ) : null}
+
+        {/* Ações */}
+        {needsDecision ? (
+          <section>
+            <SectionTitle>Decisão do analista</SectionTitle>
+            <p className="mt-1 text-xs text-neutral-muted">
+              A nota foi encaminhada para revisão humana. Registre sua
+              decisão — a trilha de auditoria fica vinculada ao seu usuário.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <Button
+                onClick={onApprove}
+                className="h-10 bg-status-success hover:brightness-110"
+              >
+                <ThumbsUp className="h-4 w-4" aria-hidden />
+                Aprovar com ressalva
+              </Button>
+              <Button
+                onClick={onReject}
+                variant="destructive"
+                className="h-10"
+              >
+                <ThumbsDown className="h-4 w-4" aria-hidden />
+                Rejeitar
+              </Button>
+            </div>
+          </section>
+        ) : done && note.finalStatus === "HUMAN_REVIEW" ? (
+          <section>
+            <SectionTitle>Decisão registrada</SectionTitle>
+            <p className="mt-1 text-sm text-neutral-ink">
+              {decision === "approved"
+                ? "Você aprovou esta nota manualmente. Encaminhada para pagamento com ressalva anexada à trilha de auditoria."
+                : "Você rejeitou esta nota. O fornecedor será notificado e a nota aguardará correção."}
+            </p>
+          </section>
+        ) : !done ? (
+          <section>
+            <SectionTitle>Processando</SectionTitle>
+            <p className="mt-1 text-sm text-neutral-muted">
+              Agente em execução — etapa {stage + 1} de {LIVE_STAGES.length}{" "}
+              ({LIVE_STAGES[Math.min(stage, LIVE_STAGES.length - 1)].label}).
+            </p>
+          </section>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h3 className="text-[11px] font-semibold uppercase tracking-wide text-neutral-muted">
+      {children}
+    </h3>
+  );
+}
+
+function StatusIcon({
+  note,
+  decision,
+  done,
+}: {
+  note: LiveNote;
+  decision?: ManualDecision;
+  done: boolean;
+}) {
+  if (!done) {
+    return (
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-teal-light text-brand-teal">
+        <ShieldCheck className="h-4 w-4" aria-hidden />
+      </span>
+    );
+  }
+  if (note.finalStatus === "POSTED" || decision === "approved") {
+    return (
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-status-success text-white">
+        <CheckCircle2 className="h-4 w-4" aria-hidden />
+      </span>
+    );
+  }
+  if (decision === "rejected") {
+    return (
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-status-error text-white">
+        <XCircle className="h-4 w-4" aria-hidden />
+      </span>
+    );
+  }
+  return (
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-status-warning text-white">
+      <AlertTriangle className="h-4 w-4" aria-hidden />
+    </span>
+  );
+}
+
+function titleFor(
+  note: LiveNote,
+  decision: ManualDecision | undefined,
+  done: boolean
+) {
+  if (!done) return "Processando pelo agente…";
+  if (note.finalStatus === "POSTED") return "Aprovada automaticamente · POSTED";
+  if (decision === "approved") return "Aprovada manualmente pelo analista";
+  if (decision === "rejected") return "Rejeitada pelo analista";
+  return "Encaminhada para revisão humana";
+}
+
+function TaxValues({ t }: { t: LiveTaxLine }) {
+  if (t.status === "na") {
+    return <span className="text-xs text-neutral-muted">—</span>;
+  }
+  if (t.status === "suspended") {
+    return (
+      <span className="text-xs font-medium text-brand-teal">
+        R$ 0,00 · suspenso
+      </span>
+    );
+  }
+  const diff = t.status === "mismatch";
+  return (
+    <div className="text-right text-xs leading-tight">
+      <div
+        className={cn(
+          "font-mono tabular-nums",
+          diff ? "font-semibold text-status-error" : "text-neutral-ink"
+        )}
+      >
+        {formatBRL(t.calculated)}
+      </div>
+      <div className="font-mono tabular-nums text-neutral-muted">
+        {formatBRL(t.declared)}{" "}
+        <span className="text-[9px] uppercase">declarado</span>
+      </div>
+    </div>
+  );
+}
+
+function TaxStatus({ t }: { t: LiveTaxLine }) {
+  if (t.status === "ok")
+    return (
+      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-status-success-bg text-status-success">
+        <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+      </span>
+    );
+  if (t.status === "mismatch")
+    return (
+      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-status-error-bg text-status-error">
+        <XCircle className="h-3.5 w-3.5" aria-hidden />
+      </span>
+    );
+  if (t.status === "suspended")
+    return (
+      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-brand-teal-light text-brand-teal">
+        <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
+      </span>
+    );
+  return (
+    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-neutral-bg text-neutral-muted">
+      —
+    </span>
+  );
+}
