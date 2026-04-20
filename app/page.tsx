@@ -13,11 +13,6 @@ const roiStats = [
     value: "99%",
     label: "Acurácia em extração e 3-way match",
   },
-  {
-    icon: Sparkles,
-    value: "1–3%",
-    label: "Captura de early payment discount",
-  },
 ];
 
 export default function LandingPage() {
@@ -60,7 +55,7 @@ export default function LandingPage() {
 
       <section
         aria-label="Indicadores de ROI estimado"
-        className="grid grid-cols-1 gap-4 md:grid-cols-3"
+        className="grid grid-cols-1 gap-4 md:grid-cols-2"
       >
         {roiStats.map(({ icon: Icon, value, label }) => (
           <div
