@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CompNfse xmlns="http://www.abrasf.org.br/nfse.xsd">
+  <Nfse>
+    <InfNfse Id="NFSE2026000047111">
+      <Numero>47111</Numero>
+      <CodigoVerificacao>7F3A-BC21</CodigoVerificacao>
+      <DataEmissao>2026-04-18T09:15:00-03:00</DataEmissao>
+      <NaturezaOperacao>Serviço portuário</NaturezaOperacao>
+      <OptanteSimplesNacional>2</OptanteSimplesNacional>
+      <IncentivadorCultural>2</IncentivadorCultural>
+      <Status>1</Status>
+      <Servico>
+        <Valores>
+          <ValorServicos>47500.00</ValorServicos>
+          <ValorPis>308.75</ValorPis>
+          <ValorCofins>1425.00</ValorCofins>
+          <ValorIss>2375.00</ValorIss>
+          <ValorCsll>475.00</ValorCsll>
+          <ValorIr>712.50</ValorIr>
+          <Aliquota>5.00</Aliquota>
+          <BaseCalculo>47500.00</BaseCalculo>
+        </Valores>
+        <ItemListaServico>20.01</ItemListaServico>
+        <CodigoCnae>5231101</CodigoCnae>
+        <Discriminacao>Movimentação portuária - 47 TEUs no Terminal T-21</Discriminacao>
+        <MunicipioPrestacaoServico>3548500</MunicipioPrestacaoServico>
+      </Servico>
+      <PrestadorServico>
+        <IdentificacaoPrestador>
+          <Cnpj>12345678000190</Cnpj>
+          <InscricaoMunicipal>332211</InscricaoMunicipal>
+        </IdentificacaoPrestador>
+        <RazaoSocial>Operadora Portuária Santos Ltda</RazaoSocial>
+        <Endereco>
+          <Endereco>Av. Cândido Gaffrée, 500</Endereco>
+          <Numero>500</Numero>
+          <Bairro>Outeirinhos</Bairro>
+          <CodigoMunicipio>3548500</CodigoMunicipio>
+          <Uf>SP</Uf>
+          <Cep>11013903</Cep>
+        </Endereco>
+      </PrestadorServico>
+      <TomadorServico>
+        <IdentificacaoTomador>
+          <CpfCnpj>
+            <Cnpj>28140316000110</Cnpj>
+          </CpfCnpj>
+          <InscricaoMunicipal>998877</InscricaoMunicipal>
+        </IdentificacaoTomador>
+        <RazaoSocial>DP World Santos S.A.</RazaoSocial>
+        <Endereco>
+          <Endereco>Av. Engenheiro Augusto Barata, 100</Endereco>
+          <Bairro>Santos</Bairro>
+          <CodigoMunicipio>3548500</CodigoMunicipio>
+          <Uf>SP</Uf>
+          <Cep>11095907</Cep>
+        </Endereco>
+      </TomadorServico>
+      <OrgaoGerador>
+        <CodigoMunicipio>3548500</CodigoMunicipio>
+        <Uf>SP</Uf>
+      </OrgaoGerador>
+    </InfNfse>
+  </Nfse>
+</CompNfse>
