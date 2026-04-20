@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 export function KPICards({ items }: { items: KPI[] }) {
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
       {items.map((kpi) => (
         <div
           key={kpi.label}

@@ -110,7 +110,7 @@ public/sample-nfse.xml  → Exemplo para testar upload livre
 | 3:00–5:00 | `/demo` — Cenário 2 | "E quando o fornecedor erra a alíquota de ISS?" Clica **Exceção fiscal**. Aponta o card de Retenções mostrando `R$ 4.115 calculado vs R$ 1.646 declarado`. Score 88 — HUMAN_REVIEW. Mostra a justificativa em PT-BR gerada pelo Claude. |
 | 5:00–6:30 | `/demo` — Cenário 3 | "E quando o valor da nota não bate com o pedido?" Clica **Divergência 3-way match**. Aponta o campo `Preço unitário` em vermelho. Score 74 — HUMAN_REVIEW. "O agente não bloqueia o pagamento — ele pede confirmação com justificativa estruturada." |
 | 6:30–8:00 | `/demo` — Upload livre | (Opcional — se o cliente pedir.) Arraste `public/sample-nfse.xml` (ou um XML real deles). Mostra extração via Claude Sonnet acontecendo ao vivo. Comenta: "PO e documento de recebimento estão simulados na demo — a nota é real, a integração com Oracle está mockada." |
-| 8:00–9:30 | `/dashboard` | Mostra como fica em produção. Aponta cada KPI: 247 notas hoje, 82% touchless, R$ 18.400 de early payment na semana. Explica o gráfico stacked: verde = automáticas, roxo = revisão. |
+| 8:00–9:30 | `/dashboard` | Mostra como fica em produção. Aponta cada KPI: 247 notas hoje, 82% touchless rate, 3min42s de tempo médio por nota. Explica o gráfico stacked: verde = automáticas, roxo = revisão. |
 | 9:30–10:00 | Perguntas | Fecha: "Tudo que vocês viram é audit-friendly — cada decisão tem trace, log e justificativa executiva. A próxima fase é conectar o Oracle Fusion real e a SEFAZ." |
 
 ## Scripts úteis

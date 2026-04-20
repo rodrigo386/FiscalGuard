@@ -26,12 +26,6 @@ export const KPIS: KPI[] = [
     trend: "−41% vs. baseline",
     trendTone: "positive",
   },
-  {
-    label: "Economia em early payment",
-    value: "R$ 18.400",
-    trend: "Esta semana",
-    trendTone: "positive",
-  },
 ];
 
 export interface HourlyPoint {
